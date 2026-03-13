@@ -1,0 +1,35 @@
+.program i2c_capture
+
+.wrap_target
+    wait 1 pin 1    ;wait SCL HIGH 
+    wait 1 pin 0    ;wait SDA HIGH
+    wait 0 pin 0    ;SDA drop = Start condition
+    
+    wait 0 pin 1
+read_bit:
+    wait 0 pin 1    ;wait SCL LOW
+    wait 1 pin 1    ;rising edge SCL
+    in pins, 1      ;read SDA in ISR
+    jmp read_bit
+.wrap
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void i2c_capture_program_init(PIO pio, uint sm, uint offset, uint sda_pin){
+    pio_sm_config c = i2c_capture_program_get_default_config(offset);
+
+    sm_config_set_in_pins(&c, sda_pin);
+    sm_config_set_in_shift(&c, false, true, 8);
+
+    float div = clock_get_hz(clk_sys) / 4000000.0f;
+    sm_config_set_clkdiv(&c, div);
+    
+    pio_sm_set_consecutive_pindirs(pio, sm, sda_pin, 2, false);
+    pio_gpio_init(pio, sda_pin);
+    pio_gpio_init(pio, sda_pin + 1);
+    
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
