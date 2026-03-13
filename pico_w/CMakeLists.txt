@@ -19,6 +19,7 @@ pico_generate_pio_header(logic_analyzer
 target_link_libraries(logic_analyzer
     pico_stdlib
     hardware_pio
+    pico_time
 )
 
 pico_enable_stdio_usb(logic_analyzer 1)

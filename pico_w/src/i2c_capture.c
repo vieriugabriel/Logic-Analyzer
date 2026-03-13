@@ -1,9 +1,11 @@
 #include "i2c_capture.h"
 #include "i2c_capture.pio.h"
 #include <stdio.h>
+#include "pico/stdlib.h"
 
 #define SDA_PIN 2
 #define SCL_PIN 3
+#define PACKET_TIMEOUT_US 200
 
 static PIO pio;
 static uint sm;
@@ -21,11 +23,24 @@ void i2c_capture_init(void){
 void i2c_capture_process(void){
     static int byte_count = 0;
     static bool is_first_byte = true;
+    static absolute_time_t last_byte_time;
+
+    if (!is_first_byte) {
+        if (absolute_time_diff_us(last_byte_time, get_absolute_time()) > PACKET_TIMEOUT_US) {
+            printf("--- STOP (timeout) ---\n");
+            is_first_byte = true;
+            byte_count = 0;
+
+            pio_sm_clear_fifos(pio, sm);
+            pio_sm_restart(pio, sm);
+        }
+    }
 
     while (!pio_sm_is_rx_fifo_empty(pio, sm)){
         uint32_t raw = pio_sm_get(pio, sm);
-        printf("RAW: 0x%08X\n", raw);
         uint8_t byte = raw & 0xFF;
+
+        last_byte_time = get_absolute_time();
 
         if (is_first_byte) {
             uint8_t addr = byte >> 1;
