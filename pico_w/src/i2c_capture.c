@@ -2,6 +2,7 @@
 #include "i2c_capture.pio.h"
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "wifi_server.h"
 
 #define SDA_PIN 2
 #define SCL_PIN 3
@@ -9,6 +10,7 @@
 
 static PIO pio;
 static uint sm;
+static char buffer[128];
 
 void i2c_capture_init(void){
     pio = pio0;
@@ -16,18 +18,27 @@ void i2c_capture_init(void){
 
     uint offset = pio_add_program(pio, &i2c_capture_program);
     i2c_capture_program_init(pio, sm, offset, SDA_PIN);
-
+    
+    snprintf(buffer, sizeof(buffer), "I2C Capture initialized\n");
     printf("I2C Capture initialized\n");
+    wifi_server_send(buffer);
+    snprintf(buffer, sizeof(buffer), "SDA: GPIO%d | SCL: GPIO%d\n", SDA_PIN, SCL_PIN);
     printf("SDA: GPIO%d | SCL: GPIO%d\n", SDA_PIN, SCL_PIN);
+    wifi_server_send(buffer);
+
+ 
 }
 void i2c_capture_process(void){
     static int byte_count = 0;
     static bool is_first_byte = true;
     static absolute_time_t last_byte_time;
+    static uint8_t last_addr = 0;
 
     if (!is_first_byte) {
         if (absolute_time_diff_us(last_byte_time, get_absolute_time()) > PACKET_TIMEOUT_US) {
+            snprintf(buffer, sizeof(buffer), "--- STOP (timeout) ---\n");
             printf("--- STOP (timeout) ---\n");
+            wifi_server_send(buffer);
             is_first_byte = true;
             byte_count = 0;
 
@@ -44,15 +55,26 @@ void i2c_capture_process(void){
 
         if (is_first_byte) {
             uint8_t addr = byte >> 1;
+            last_addr = addr;
             uint8_t rw   = byte & 0x01;
+
+            snprintf(buffer, sizeof(buffer), "\n--- Pachet nou ---\n");
             printf("\n--- Pachet nou ---\n");
+            wifi_server_send(buffer);
+            
+            snprintf(buffer, sizeof(buffer), "START | Adresa: 0x%02X | %s\n",
+                    addr, rw ? "READ" : "WRITE");
             printf("START | Adresa: 0x%02X | %s\n",
-                   addr, rw ? "READ" : "WRITE");
+                    addr, rw ? "READ" : "WRITE");
+            wifi_server_send(buffer);
             is_first_byte = false;
             byte_count = 0;
         } else {
+            snprintf(buffer, sizeof(buffer), "DATA  | Byte %d: 0x%02X (%d)\n",
+                   byte_count++, byte, byte);
             printf("DATA  | Byte %d: 0x%02X (%d)\n",
                    byte_count++, byte, byte);
+            wifi_server_send(buffer);
             
             if (byte_count >= 10) {
                 is_first_byte = true;
